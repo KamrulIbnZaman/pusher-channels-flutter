@@ -99,21 +99,31 @@ public class SwiftPusherChannelsFlutterPlugin: NSObject, FlutterPlugin, PusherDe
   }
 
   public func fetchAuthValue(socketID: String, channelName: String, completionHandler: @escaping (PusherAuth?) -> Void) {
-    methodChannel!.invokeMethod("onAuthorizer", arguments: [
+    guard let methodChannel = methodChannel else {
+      completionHandler(nil)
+      return
+    }
+    methodChannel.invokeMethod("onAuthorizer", arguments: [
       "socketId": socketID,
       "channelName": channelName,
     ]) { authData in
-      if authData != nil {
-        let authDataCast = authData as! [String: String]
-        completionHandler(
-          PusherAuth(
-            auth: authDataCast["auth"]!,
-            channelData: authDataCast["channel_data"],
-            sharedSecret: authDataCast["shared_secret"]
-          ))
-      } else {
+      // The reply is not always a dictionary: if the Dart handler is missing (e.g. after a
+      // hot restart) or throws, Flutter hands back FlutterMethodNotImplemented or a
+      // FlutterError. A force cast here aborted the whole app; fail this one auth instead.
+      guard let raw = authData as? [AnyHashable: Any] else {
         completionHandler(nil)
+        return
       }
+      guard let auth = raw["auth"] as? String else {
+        completionHandler(nil)
+        return
+      }
+      completionHandler(
+        PusherAuth(
+          auth: auth,
+          channelData: raw["channel_data"] as? String,
+          sharedSecret: raw["shared_secret"] as? String
+        ))
     }
   }
 
